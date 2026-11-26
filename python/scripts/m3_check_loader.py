@@ -31,7 +31,7 @@ def main():
     out = subprocess.run([str(EXE)], capture_output=True, text=True, check=True).stdout
     cpp = {}
     for line in out.splitlines():
-        if line.startswith("#"):
+        if not line.startswith(("weights ", "vectors ")):
             continue
         label, name, rest = line.split(" ", 2)
         shape, h = rest.rsplit(" ", 1)

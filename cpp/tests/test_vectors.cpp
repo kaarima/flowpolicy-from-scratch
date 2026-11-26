@@ -8,6 +8,7 @@
 #include <string>
 
 #include "flowpolicy/fpbin.hpp"
+#include "flowpolicy/tensor.hpp"
 
 #ifndef FP_WEIGHTS
 #define FP_WEIGHTS "weights/film_g.bin"
@@ -15,6 +16,16 @@
 #ifndef FP_VECTORS
 #define FP_VECTORS "tests/vectors/vectors.bin"
 #endif
+
+// Compares got with the NumPy vector `name`; prints "check <name> <shape> max_abs_err <e> PASS|FAIL".
+static bool check(const fp::TensorFile& vec, const char* name, const fp::Tensor& got, float tol) {
+    const fp::Tensor want = fp::Tensor::from(vec.get(name));
+    const float err = fp::max_abs_diff(got, want);
+    const bool ok = err < tol;
+    std::printf("check %s %s max_abs_err %.3e tol %.0e %s\n", name, got.shape_str().c_str(), static_cast<double>(err),
+                static_cast<double>(tol), ok ? "PASS" : "FAIL");
+    return ok;
+}
 
 static void dump(const char* label, const fp::TensorFile& tf) {
     std::size_t total = 0;
@@ -34,9 +45,16 @@ int main(int argc, char** argv) {
         const auto vectors = fp::TensorFile::load(vpath);
         dump("weights", weights);
         dump("vectors", vectors);
-        // TODO (your code, in order):
-        //   1. Tensor + matmul + Linear:  x_t @ Win + bin  vs  h0           (max abs err < 1e-5)
-        //   2. SiLU + condition encoder:  SiLU(cond @ Wc + bc)  vs  cond_e
+
+        bool ok = true;
+        const fp::Tensor x_t = fp::Tensor::from(vectors.get("x_t"));
+        const fp::Tensor cond = fp::Tensor::from(vectors.get("cond"));
+        // 1. Tensor + matmul + Linear: input projection (no activation)
+        ok &= check(vectors, "h0", fp::Linear::from(weights, "Win", "bin").forward(x_t), 1e-5f);
+        // 2. Linear + SiLU: condition encoder
+        ok &= check(vectors, "cond_e", fp::silu(fp::Linear::from(weights, "Wc", "bc").forward(cond)), 1e-5f);
+        if (!ok) return 2;
+        // TODO, in order:
         //   3. time embedding:            temb(t, time_freqs)   vs  temb
         //   4. FiLM block 0:              vs  film0_scale, block0_out
         //   5. full network:              vs  velocity

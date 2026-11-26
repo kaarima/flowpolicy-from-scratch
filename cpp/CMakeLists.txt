@@ -13,6 +13,7 @@ set(CMAKE_CXX_FLAGS_RELEASE "-O2")
 # Library: your sources go in src/ and include/flowpolicy/ and get added here.
 add_library(flowpolicy
   src/fpbin.cpp
+  src/tensor.cpp
 )
 target_include_directories(flowpolicy PUBLIC include)
 target_compile_options(flowpolicy PRIVATE -Wall -Wextra -Wpedantic -Wconversion -Wshadow)

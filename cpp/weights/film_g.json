@@ -1,0 +1,17 @@
+{
+ "source": "checkpoints/film_noise4_late/best.npz",
+ "step": 50000,
+ "hidden": 512,
+ "n_blocks": 3,
+ "n_freqs": 8,
+ "cond_hidden": 256,
+ "obs_dim_per_frame": 18,
+ "n_obs_steps": 2,
+ "chunk": [
+  16,
+  2
+ ],
+ "euler_steps": 10,
+ "weight_layout": "(in, out), y = x @ W + b",
+ "training": "obs noise 4 px, late t (t = sqrt(u))"
+}

@@ -26,3 +26,6 @@ build/
 CLAUDE.md
 .claude/
 AGENTS.md
+
+# C++ port: model weights are published outside git (regenerate with python/scripts/m3_export.py)
+cpp/weights/*.bin

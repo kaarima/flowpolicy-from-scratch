@@ -91,6 +91,16 @@ env, same eval code, same 500 test seeds (200000-200499).**
 
 ![training curves, all FiLM runs](docs/media/m2_runs_all.png)
 
+## M3: C++ port (in progress)
+Inference port of the FiLM policy, C++17, std only. Weight format: `cpp/weights/FORMAT.md` (weights stored (in, out)).
+The weights file (`cpp/weights/film_g.bin`, 9.6 MB) is not in git. Regenerate it from a trained checkpoint:
+```bash
+PYTHONPATH=python python python/scripts/m3_export.py          # -> cpp/weights/film_g.bin + cpp/tests/vectors/vectors.bin
+cmake -S cpp -B cpp/build && cmake --build cpp/build
+./cpp/build/test_vectors                                        # loads weights + test vectors
+PYTHONPATH=python python python/scripts/m3_check_loader.py    # C++ loader vs NumPy, bitwise
+```
+
 ## PushT env notes (checked in `python/scripts/m2_inspect.py`)
 - `obs_type="environment_state_agent_pos"` matches `lerobot/pusht_keypoints` exactly: same 16 keypoint order,
   pixel units in [0, 512]; max error 2.7e-5 px over all 25,650 frames (swapping the T's two rectangles gives 81 px),

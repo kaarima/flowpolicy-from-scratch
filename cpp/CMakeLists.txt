@@ -1,5 +1,29 @@
-# Placeholder: C++ port of the NumPy flow-matching policy (M3). std (+ maybe Eigen), no ML libraries.
+# C++ port of the NumPy flow-matching policy (M3). C++17, std only (+ maybe Eigen later), no ML libraries.
 cmake_minimum_required(VERSION 3.16)
 project(flowpolicy CXX)
+
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(CMAKE_CXX_EXTENSIONS OFF)
+if(NOT CMAKE_BUILD_TYPE)
+  set(CMAKE_BUILD_TYPE Release)
+endif()
+set(CMAKE_CXX_FLAGS_RELEASE "-O2")
+
+# Library: your sources go in src/ and include/flowpolicy/ and get added here.
+add_library(flowpolicy
+  src/fpbin.cpp
+)
+target_include_directories(flowpolicy PUBLIC include)
+target_compile_options(flowpolicy PRIVATE -Wall -Wextra -Wpedantic -Wconversion -Wshadow)
+
+# Test harness: compares the C++ forward pass with the NumPy test vectors.
+add_executable(test_vectors tests/test_vectors.cpp)
+target_link_libraries(test_vectors PRIVATE flowpolicy)
+target_compile_options(test_vectors PRIVATE -Wall -Wextra -Wpedantic -Wconversion -Wshadow)
+target_compile_definitions(test_vectors PRIVATE
+  FP_WEIGHTS="${CMAKE_CURRENT_SOURCE_DIR}/weights/film_g.bin"
+  FP_VECTORS="${CMAKE_CURRENT_SOURCE_DIR}/tests/vectors/vectors.bin")
+
+enable_testing()
+add_test(NAME test_vectors COMMAND test_vectors)

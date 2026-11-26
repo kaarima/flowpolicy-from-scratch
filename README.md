@@ -7,31 +7,38 @@ PyTorch is used only for gradient checks.
 
 ![FiLM policy on PushT](docs/media/m2_film_noise4_late.gif)
 
-*Best M2 policy (FiLM + obs noise + late-t sampling): 70.0 % success on 500 test episodes, one training seed.
-These 4 episodes (test seeds 200000-200003) all succeed; 30 % of episodes do not.*
+*Best M2 policy (FiLM + obs noise + late-t sampling): 70.3 % ± 2.0 success (mean ± std over 3 training seeds,
+500 test episodes each). These 4 episodes (test seeds 200000-200003) all succeed; about 30 % of episodes do not.*
 
 ## Milestones
 | | Milestone | Status |
 |---|---|---|
 | M0 | Setup: repo, env, inspect PushT env and dataset | done |
 | M1 | 2D flow-matching toy in NumPy (own MLP, backprop, Adam) | done |
-| M2 | Flow-matching policy on PushT keypoints (NumPy), compared with LeRobot's diffusion policy | 70.0 % success (LeRobot DP: 71.0 %); seed repeats pending |
+| M2 | Flow-matching policy on PushT keypoints (NumPy), compared with LeRobot's diffusion policy | done: 70.3 % vs LeRobot 75.6 % on the same seeds |
 | M3 | C++ port (std, maybe Eigen, no ML libraries) | |
 | M4 | Vision: policy from images | |
 | M5 | Real robot arm | |
 | M6 | Ship: write-up, demo, release | |
 
 ## Results
-PushT, keypoints + agent position. Success = max coverage > 95 % within 300 steps.
+PushT, keypoints + agent position. Success = max coverage > 95 % within 300 steps. **Both policies run in the same
+env, same eval code, same 500 test seeds (200000-200499).**
 
-| Policy | Success rate | Avg max reward | Episodes | Notes |
+| Policy | Success rate | Avg max reward | Params | Time per action chunk (batch 1) |
 |---|---|---|---|---|
-| Flow matching, FiLM residual MLP + obs noise 4 px + late-t sampling (NumPy, ours) | **70.0 % ± 2.0** (95 % CI 66.0–74.0) | 0.946 | 500 (test seeds) | 2.4 M params, CPU, ~50 min training, 1 training seed |
+| **Flow matching, FiLM residual MLP (NumPy, ours)** | **70.3 % ± 2.0** (3 training seeds: 70.0 / 68.4 / 72.4) | 0.942 | 2.4 M | **2.4 ms** (CPU, 10 Euler steps) |
+| LeRobot diffusion policy, `lerobot/diffusion_pusht_keypoints` (re-measured) | 75.6 % ± 1.9 | 0.964 | 248.8 M | 242 ms (RTX 3050 GPU), 623 ms (CPU); 10 DDIM steps |
 | Flow matching (C++, ours) | – | – | | M3 |
-| LeRobot diffusion policy (keypoints) | 71.0 % | 0.97 | 500 | from the [model card](https://huggingface.co/lerobot/diffusion_pusht_keypoints), not re-measured |
 
-± = one standard error over 500 episodes, sqrt(p(1-p)/500); 95 % CI = ± 1.96 s.e. LeRobot's card gives no eval seeds or checkpoint step, and says 50 episodes in its usage
-text but 500 in its results table. More baselines (including the original paper) in `docs/BASELINES.md`.
+- **Close to LeRobot's diffusion policy (about 5 points behind) with 100× fewer parameters.** Per decision, our CPU
+  policy is **~100× faster than their GPU inference** (2.4 ms vs 242 ms) and **~260× faster CPU-to-CPU** (2.4 ms vs
+  623 ms). From scratch in NumPy, trained on a laptop CPU in ~50 min.
+- ± for ours = std over 3 training seeds; ± for LeRobot = one standard error over 500 episodes, sqrt(p(1-p)/500).
+- LeRobot's card reports 71.0 % on seeds 100000-100499 (2024). Re-run today on those seeds it gives 76.6 % ± 1.9, but
+  the same seed no longer gives the same start layout (gym-pusht's reset RNG changed; per-seed results are
+  uncorrelated), so the published 71.0 % is not comparable seed by seed. Only the same-env numbers above are.
+  Details in `docs/BASELINES.md`.
 
 ## M2: flow-matching policy on PushT
 **Setup**
@@ -71,12 +78,14 @@ text but 500 in its results table. More baselines (including the original paper)
 | + obs noise 2 px + late t | 65.4 % | 63.0 % | 0.951 |
 | same, training seed 1 | 61.6 % | 62.6 % | 0.952 |
 | **+ obs noise 4 px + late t** | **70.0 %** | **70.0 %** | 0.946 |
+| same, training seed 1 | 68.4 % | 68.4 % | 0.943 |
+| same, training seed 2 | 72.4 % | 71.4 % | 0.937 |
 
 - Obs noise: Gaussian noise (in pixels) on the 36 observation values during training. +10 points.
 - Late t: train the flow more near t=1, the data end, where fine alignment is decided (t = sqrt(u), density 2t).
   +5-7 points, and the highest coverage.
 - Weight decay: no effect.
-- Seed-to-seed spread (two training seeds of the same setup): about 2-4 points. The 70.0 % run has one seed so far.
+- Seed-to-seed spread: about 2-4 points (std 2.0 over the 3 seeds of the final config).
 - Val loss rises in every run, even when closed-loop success improves: on this task it is a poor checkpoint selector.
 - Failures of the 70 % policy: 116 of 150 are near misses (max coverage 0.90-0.95), 27 never pass 0.5.
 

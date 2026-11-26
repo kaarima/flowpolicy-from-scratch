@@ -15,6 +15,7 @@ add_library(flowpolicy
   src/fpbin.cpp
   src/tensor.cpp
   src/film.cpp
+  src/policy.cpp
 )
 target_include_directories(flowpolicy PUBLIC include)
 target_compile_options(flowpolicy PRIVATE -Wall -Wextra -Wpedantic -Wconversion -Wshadow)
@@ -29,3 +30,9 @@ target_compile_definitions(test_vectors PRIVATE
 
 enable_testing()
 add_test(NAME test_vectors COMMAND test_vectors)
+
+# Policy behind a stdin/stdout pipe, for the closed-loop eval in Python (python/scripts/m3_eval_cpp.py).
+add_executable(policy_server tools/policy_server.cpp)
+target_link_libraries(policy_server PRIVATE flowpolicy)
+target_compile_options(policy_server PRIVATE -Wall -Wextra -Wpedantic -Wconversion -Wshadow)
+target_compile_definitions(policy_server PRIVATE FP_WEIGHTS="${CMAKE_CURRENT_SOURCE_DIR}/weights/film_g.bin")

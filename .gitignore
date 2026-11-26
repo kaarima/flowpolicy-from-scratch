@@ -16,6 +16,7 @@ outputs/
 # Media: GIFs only kept under docs/media
 *.gif
 !docs/media/*.gif
+!docs/media/**/*.gif
 
 # C++ build
 cpp/build/

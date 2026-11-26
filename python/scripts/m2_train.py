@@ -66,7 +66,7 @@ def main():
     opt = Adam(policy.net.params, lr=args.lr, weight_decay=args.weight_decay,
                decay=[k for k in policy.net.params if k.startswith("W")])
     ema = EMA(policy.net.params, args.ema)
-    ema_policy = FlowPolicy(args.hidden, args.layers, args.n_freqs, arch=args.arch)
+    ema_policy = FlowPolicy(args.hidden, args.layers, args.n_freqs, arch=args.arch, t_sampling=args.t_sampling)
     ema_policy.net.params = ema.params  # shares the arrays: always the current EMA weights
 
     log_f = open(out / "log.csv", "w", newline="")

@@ -70,3 +70,13 @@ def test_window_dataset_shapes_and_content():
     np.testing.assert_allclose(an.unnormalize(a), act[8:24], atol=1e-4)
     n_batches = sum(1 for _ in ds.iterate(10))
     assert n_batches == 3
+
+
+def test_obs_noise_in_pixels():
+    obs, act, ep = toy_episodes()
+    on, an = MinMaxNormalizer.fit(obs), MinMaxNormalizer.fit(act)
+    ds = WindowDataset(obs, act, ep, np.array([0, 1, 2]), on, an)
+    o0, _ = ds.sample(20000, np.random.default_rng(3))
+    o1, _ = ds.sample(20000, np.random.default_rng(3), obs_noise_px=2.0)
+    diff_px = (o1 - o0) * 0.5 * np.tile(on.range, 2)   # back to pixels
+    np.testing.assert_allclose(diff_px.std(0), 2.0, rtol=0.05)

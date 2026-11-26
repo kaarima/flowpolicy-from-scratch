@@ -35,11 +35,14 @@ def main():
     p.add_argument("--steps", type=int, default=50000)
     p.add_argument("--batch", type=int, default=256)
     p.add_argument("--hidden", type=int, default=512)
-    p.add_argument("--layers", type=int, default=3)
+    p.add_argument("--layers", type=int, default=3, help="hidden layers (mlp) or residual blocks (film)")
+    p.add_argument("--arch", default="mlp", choices=["mlp", "film"])
     p.add_argument("--n-freqs", type=int, default=8)
     p.add_argument("--lr", type=float, default=1e-3)
     p.add_argument("--warmup", type=int, default=500)
     p.add_argument("--ema", type=float, default=0.999)
+    p.add_argument("--weight-decay", type=float, default=0.0, help="AdamW decay on weight matrices (not biases)")
+    p.add_argument("--obs-noise", type=float, default=0.0, help="obs augmentation: Gaussian std in pixels")
     p.add_argument("--seed", type=int, default=0)
     p.add_argument("--log-every", type=int, default=1000)
     p.add_argument("--eval-every", type=int, default=10000)
@@ -52,13 +55,14 @@ def main():
     print(f"train windows {len(train)}, val windows {len(val)}")
 
     rng = np.random.default_rng(args.seed)
-    policy = FlowPolicy(args.hidden, args.layers, args.n_freqs, rng)
-    n_params = sum(v.size for v in policy.mlp.params.values())
-    print(f"policy MLP {policy.mlp.n_layers} linear layers, hidden {args.hidden}, {n_params / 1e6:.2f} M params")
-    opt = Adam(policy.mlp.params, lr=args.lr)
-    ema = EMA(policy.mlp.params, args.ema)
-    ema_policy = FlowPolicy(args.hidden, args.layers, args.n_freqs)
-    ema_policy.mlp.params = ema.params  # shares the arrays: always the current EMA weights
+    policy = FlowPolicy(args.hidden, args.layers, args.n_freqs, rng, arch=args.arch)
+    n_params = sum(v.size for v in policy.net.params.values())
+    print(f"policy {args.arch}, {args.layers} layers/blocks, hidden {args.hidden}, {n_params / 1e6:.2f} M params")
+    opt = Adam(policy.net.params, lr=args.lr, weight_decay=args.weight_decay,
+               decay=[k for k in policy.net.params if k.startswith("W")])
+    ema = EMA(policy.net.params, args.ema)
+    ema_policy = FlowPolicy(args.hidden, args.layers, args.n_freqs, arch=args.arch)
+    ema_policy.net.params = ema.params  # shares the arrays: always the current EMA weights
 
     log_f = open(out / "log.csv", "w", newline="")
     log = csv.writer(log_f)
@@ -68,10 +72,10 @@ def main():
         warm = min(1.0, step / args.warmup)
         cos = 0.5 * (1 + np.cos(np.pi * step / args.steps))
         opt.lr = args.lr * warm * (0.02 + 0.98 * cos)
-        o, a = train.sample(args.batch, rng)
+        o, a = train.sample(args.batch, rng, obs_noise_px=args.obs_noise)
         loss, grads = policy.loss_and_grads(o, a, rng)
         opt.step(grads)
-        ema.update(policy.mlp.params)
+        ema.update(policy.net.params)
         losses.append(loss)
 
         if step % args.log_every == 0 or step == args.steps:

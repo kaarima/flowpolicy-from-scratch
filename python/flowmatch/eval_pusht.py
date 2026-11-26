@@ -6,7 +6,8 @@ Metrics per episode, from the env's info only (never the dataset columns):
   success   = info["is_success"] at any step (coverage > 0.95; the env terminates there)
   max_cov   = max coverage over the episode
   max_rew   = max reward = clip(coverage / 0.95, 0, 1)  (LeRobot's "avg max overlap" is the mean of this)
-Episode i is reset with seed = seed0 + i.
+Episode i is reset with seed = seed0 + i. Seeds 100000.. select checkpoints during training; 200000.. are
+the test seeds for reported numbers (python/scripts/m2_eval.py).
 """
 import gymnasium as gym
 import gym_pusht  # noqa: F401

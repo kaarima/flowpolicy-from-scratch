@@ -1,6 +1,7 @@
 """M2: evaluate a trained flow-matching policy in gym-pusht.
 
-Episode i uses reset seed (seed0 + i), so runs are comparable. Saves results JSON next to the checkpoint and
+Episode i uses reset seed (seed0 + i), so runs are comparable. Default seed0 = 200000 (TEST seeds): checkpoints
+are selected during training on seeds 100000..100049 (SELECTION seeds), so reporting on those would be biased. Saves results JSON next to the checkpoint and
 a GIF of the first episodes to docs/media/m2_<run>.gif.
 
 Run from the repo root:
@@ -25,7 +26,7 @@ def main():
     p = argparse.ArgumentParser()
     p.add_argument("--ckpt", required=True)
     p.add_argument("--episodes", type=int, default=500)
-    p.add_argument("--seed0", type=int, default=100000)
+    p.add_argument("--seed0", type=int, default=200000, help="200000 = test seeds; 100000 = selection seeds")
     p.add_argument("--flow-steps", type=int, default=10)
     p.add_argument("--n-exec", type=int, default=8)
     p.add_argument("--gif", type=int, default=4, help="episodes to record (0 = none)")

@@ -12,7 +12,7 @@ def test_policy_loss_grads_finite_difference():
     act = rng.uniform(-1, 1, (6, 16, 2))
     _, grads = pol.loss_and_grads(obs, act, np.random.default_rng(7))
     eps = 1e-6
-    for k, p in pol.mlp.params.items():
+    for k, p in pol.net.params.items():
         idx = list(np.ndindex(p.shape))
         for j in np.random.default_rng(1).choice(len(idx), size=min(8, len(idx)), replace=False):
             i = idx[j]
@@ -30,7 +30,7 @@ def test_sample_shape_and_save_load(tmp_path):
     obs = np.zeros((3, 36), np.float32)
     a = pol.sample(obs, n_steps=4, rng=np.random.default_rng(1))
     assert a.shape == (3, 16, 2) and a.dtype == np.float32
-    ema = EMA(pol.mlp.params, decay=0.5)
+    ema = EMA(pol.net.params, decay=0.5)
     pol.save(tmp_path / "p.npz", params=ema.params, extra={"step": 3})
     pol2, extra = FlowPolicy.load(tmp_path / "p.npz")
     assert extra == {"step": 3}

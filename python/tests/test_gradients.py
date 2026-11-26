@@ -86,3 +86,17 @@ def test_adam_matches_torch():
         topt.step()
     np.testing.assert_allclose(params["a"], tparams[0].detach().numpy(), rtol=1e-10, atol=1e-12)
     np.testing.assert_allclose(params["b"], tparams[1].detach().numpy(), rtol=1e-10, atol=1e-12)
+
+
+def test_adamw_matches_torch():
+    rng = np.random.default_rng(5)
+    params = {"a": rng.standard_normal((3, 4))}
+    tp = torch.tensor(params["a"], requires_grad=True)
+    opt = Adam(params, lr=1e-2, weight_decay=0.1)
+    topt = torch.optim.AdamW([tp], lr=1e-2, weight_decay=0.1)
+    for _ in range(20):
+        g = rng.standard_normal((3, 4))
+        opt.step({"a": g})
+        tp.grad = torch.tensor(g)
+        topt.step()
+    np.testing.assert_allclose(params["a"], tp.detach().numpy(), rtol=1e-10, atol=1e-12)

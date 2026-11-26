@@ -107,6 +107,7 @@ class WindowDataset:
     """Normalised windows for a set of episodes. Sample random batches or take all windows in order."""
 
     def __init__(self, obs, act, episode_index, episode_ids, obs_norm, act_norm):
+        self.obs_norm = obs_norm
         self.obs_n = obs_norm.normalize(obs)
         self.act_n = act_norm.normalize(act)
         obs_idx, act_idx = window_indices(episode_index)
@@ -123,8 +124,14 @@ class WindowDataset:
         a = self.act_n[self.act_idx[i]]  # (.., 16, 2)
         return o.reshape(*o.shape[:-2], N_OBS_STEPS * OBS_DIM), a
 
-    def sample(self, batch_size, rng):
-        return self.get(rng.integers(0, len(self), batch_size))
+    def sample(self, batch_size, rng, obs_noise_px=0.0):
+        """Random training batch. obs_noise_px > 0 adds Gaussian noise of that std (in pixels) to every obs value,
+        independently per frame (augmentation); converted to normalised units per dimension."""
+        o, a = self.get(rng.integers(0, len(self), batch_size))
+        if obs_noise_px > 0:
+            std = np.tile(2.0 * obs_noise_px / self.obs_norm.range, N_OBS_STEPS)  # (36,)
+            o = o + (rng.standard_normal(o.shape) * std).astype(o.dtype)
+        return o, a
 
     def iterate(self, batch_size):
         for s in range(0, len(self), batch_size):

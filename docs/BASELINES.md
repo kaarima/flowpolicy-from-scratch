@@ -39,7 +39,7 @@ LeRobot 0.4.4 with a strict key check, run through our eval loop (gym-pusht 0.1.
 | Seeds | LeRobot DP keypoints | Our FiLM policy (3 training seeds) |
 |---|---|---|
 | 100000-100499 (their published seeds) | 76.6 % ± 1.9, avg max reward 0.962 (published: 71.0 %, 0.969) | not run: our selection seeds overlap |
-| **200000-200499 (our test seeds)** | **75.6 % ± 1.9**, avg max reward 0.964 | **70.3 % ± 2.0** (70.0 / 68.4 / 72.4), 0.942 |
+| **200000-200499 (our test seeds)** | **74.7 % ± 1.0** over 3 noise draws (75.6 / 75.0 / 73.6), avg max reward 0.966 | **69.2 % ± 2.3** over 3 training seeds × 3 noise draws (66.4-72.4), 0.936 |
 
 - Same checkpoint, same seeds, but 76.6 % today vs 71.0 % published: per-seed max reward is uncorrelated with their
   eval_info.json (r = 0.01; 92 episodes succeed only there, 120 only here). gym-pusht now resets with the env's own RNG,

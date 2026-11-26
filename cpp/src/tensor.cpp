@@ -65,11 +65,16 @@ Linear Linear::from(const TensorFile& f, const std::string& w_name, const std::s
 }
 
 Tensor Linear::forward(const Tensor& x) const {
-    Tensor y = matmul(x, W);
+    Tensor y({x.dim(0), out_features()});
+    forward_into(x, y);
+    return y;
+}
+
+void Linear::forward_into(const Tensor& x, Tensor& y) const {
+    matmul(x, W, y);
     const std::size_t rows = y.dim(0), n = y.dim(1);
     for (std::size_t i = 0; i < rows; ++i)
         for (std::size_t j = 0; j < n; ++j) y[i * n + j] += b[j];
-    return y;
 }
 
 void silu_inplace(Tensor& x) {
@@ -79,6 +84,11 @@ void silu_inplace(Tensor& x) {
 Tensor silu(Tensor x) {
     silu_inplace(x);
     return x;
+}
+
+void silu_into(const Tensor& src, Tensor& dst) {
+    if (src.size() != dst.size()) throw std::invalid_argument("silu_into: size mismatch");
+    for (std::size_t i = 0; i < src.size(); ++i) dst[i] = src[i] / (1.0f + std::exp(-src[i]));
 }
 
 float max_abs_diff(const Tensor& a, const Tensor& b) {

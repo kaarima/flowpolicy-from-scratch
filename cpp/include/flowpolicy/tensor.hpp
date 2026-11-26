@@ -48,11 +48,14 @@ struct Linear {
     std::size_t in_features() const { return W.dim(0); }
     std::size_t out_features() const { return W.dim(1); }
     Tensor forward(const Tensor& x) const;  // x: (B, in) -> (B, out)
+    void forward_into(const Tensor& x, Tensor& y) const;  // y preallocated (B, out), overwritten
 };
 
 // SiLU(z) = z / (1 + exp(-z)), element-wise.
 void silu_inplace(Tensor& x);
 Tensor silu(Tensor x);
+// dst = SiLU(src), dst preallocated with the same size.
+void silu_into(const Tensor& src, Tensor& dst);
 
 // max |a - b| over all elements; shapes must match.
 float max_abs_diff(const Tensor& a, const Tensor& b);

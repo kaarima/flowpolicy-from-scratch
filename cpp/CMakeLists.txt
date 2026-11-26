@@ -8,7 +8,12 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 if(NOT CMAKE_BUILD_TYPE)
   set(CMAKE_BUILD_TYPE Release)
 endif()
-set(CMAKE_CXX_FLAGS_RELEASE "-O2")
+option(FP_NATIVE "Build with -O3 -march=native (use on the target machine, e.g. the Pi 5)" OFF)
+if(FP_NATIVE)
+  set(CMAKE_CXX_FLAGS_RELEASE "-O3 -march=native")
+else()
+  set(CMAKE_CXX_FLAGS_RELEASE "-O2")
+endif()
 
 # Library: your sources go in src/ and include/flowpolicy/ and get added here.
 add_library(flowpolicy
@@ -36,3 +41,12 @@ add_executable(policy_server tools/policy_server.cpp)
 target_link_libraries(policy_server PRIVATE flowpolicy)
 target_compile_options(policy_server PRIVATE -Wall -Wextra -Wpedantic -Wconversion -Wshadow)
 target_compile_definitions(policy_server PRIVATE FP_WEIGHTS="${CMAKE_CURRENT_SOURCE_DIR}/weights/film_g.bin")
+
+# Batch-1 latency benchmark (median over 1000 decisions, for 1 / 2 / 5 / 10 Euler steps).
+add_executable(bench tools/bench.cpp)
+target_link_libraries(bench PRIVATE flowpolicy)
+target_compile_options(bench PRIVATE -Wall -Wextra -Wpedantic -Wconversion -Wshadow)
+target_compile_definitions(bench PRIVATE
+  FP_WEIGHTS="${CMAKE_CURRENT_SOURCE_DIR}/weights/film_g.bin"
+  FP_VECTORS="${CMAKE_CURRENT_SOURCE_DIR}/tests/vectors/vectors.bin"
+  FP_FLAGS="${CMAKE_CXX_FLAGS_RELEASE}")

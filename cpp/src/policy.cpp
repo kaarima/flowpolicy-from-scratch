@@ -5,6 +5,18 @@
 
 namespace fp {
 
+Workspace::Workspace(const PolicyNet& net, std::size_t batch)
+    : B(batch),
+      t({batch}),
+      temb({batch, 2 * net.time_freqs.size()}),
+      cond({batch, net.cond_enc.in_features()}),
+      e({batch, net.cond_enc.out_features()}),
+      h({batch, net.in_proj.out_features()}),
+      hs({batch, net.in_proj.out_features()}),
+      v({batch, net.out.out_features()}),
+      a({batch, net.in_proj.in_features()}),
+      film(batch, net.in_proj.out_features()) {}
+
 PolicyNet PolicyNet::from(const TensorFile& f) {
     PolicyNet n{Linear::from(f, "Wc", "bc"), Linear::from(f, "Win", "bin"), Linear::from(f, "Wout", "bout"), {},
                 Tensor::from(f.get("time_freqs"))};
@@ -14,10 +26,21 @@ PolicyNet PolicyNet::from(const TensorFile& f) {
 }
 
 Tensor PolicyNet::velocity(const Tensor& x_t, const Tensor& obs_n, const Tensor& t) const {
-    const Tensor e = silu(cond_enc.forward(concat_cols(obs_n, time_embedding(t, time_freqs))));
-    Tensor h = in_proj.forward(x_t);
-    for (const auto& b : blocks) h = b.forward(h, e);
-    return out.forward(silu(h));
+    Workspace ws(*this, x_t.dim(0));
+    ws.t = t;
+    velocity_into(x_t, obs_n, ws);
+    return ws.v;
+}
+
+void PolicyNet::velocity_into(const Tensor& x_t, const Tensor& obs_n, Workspace& ws) const {
+    time_embedding_into(ws.t, time_freqs, ws.temb);
+    concat_cols_into(obs_n, ws.temb, ws.cond);
+    cond_enc.forward_into(ws.cond, ws.e);
+    silu_inplace(ws.e);
+    in_proj.forward_into(x_t, ws.h);
+    for (const auto& b : blocks) b.forward_inplace(ws.h, ws.e, ws.film);
+    silu_into(ws.h, ws.hs);
+    out.forward_into(ws.hs, ws.v);
 }
 
 FlowPolicy::FlowPolicy(const TensorFile& f, int euler_steps)
@@ -43,15 +66,20 @@ Tensor FlowPolicy::normalize_obs(const Tensor& obs_raw) const {
 }
 
 Tensor FlowPolicy::sample_normalized(const Tensor& obs_n, const Tensor& noise) const {
-    const std::size_t B = obs_n.dim(0);
-    Tensor a = noise;
+    Workspace ws(net_, obs_n.dim(0));
+    ws.a = noise;
+    sample_normalized_inplace(obs_n, ws);
+    return ws.a;
+}
+
+void FlowPolicy::sample_normalized_inplace(const Tensor& obs_n, Workspace& ws) const {
     const float dt = 1.0f / static_cast<float>(euler_steps_);
     for (int k = 0; k < euler_steps_; ++k) {
-        const Tensor t({B}, static_cast<float>(k * (1.0 / euler_steps_)));  // same t grid as NumPy (k * dt)
-        const Tensor v = net_.velocity(a, obs_n, t);
-        for (std::size_t i = 0; i < a.size(); ++i) a[i] += dt * v[i];
+        const float tk = static_cast<float>(k * (1.0 / euler_steps_));  // same t grid as NumPy (k * dt)
+        for (std::size_t i = 0; i < ws.B; ++i) ws.t[i] = tk;
+        net_.velocity_into(ws.a, obs_n, ws);
+        for (std::size_t i = 0; i < ws.a.size(); ++i) ws.a[i] += dt * ws.v[i];
     }
-    return a;
 }
 
 Tensor FlowPolicy::unnormalize_actions(const Tensor& chunk_n) const {

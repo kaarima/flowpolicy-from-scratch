@@ -7,16 +7,16 @@ PyTorch is used only for gradient checks.
 
 ![FiLM policy on PushT](docs/media/m2_film_noise4_late.gif)
 
-*Best M2 policy (FiLM + obs noise + late-t sampling): 70.3 % ± 2.0 success (mean ± std over 3 training seeds,
-500 test episodes each). These 4 episodes (test seeds 200000-200003) all succeed; about 30 % of episodes do not.*
+*Best M2 policy (FiLM + obs noise + late-t sampling): 69.2 % ± 2.3 success (mean ± std over 3 training seeds
+× 3 sampling-noise draws, 500 test episodes each). These 4 episodes (test seeds 200000-200003) all succeed; about 30 % of episodes do not.*
 
 ## Milestones
 | | Milestone | Status |
 |---|---|---|
 | M0 | Setup: repo, env, inspect PushT env and dataset | done |
 | M1 | 2D flow-matching toy in NumPy (own MLP, backprop, Adam) | done |
-| M2 | Flow-matching policy on PushT keypoints (NumPy), compared with LeRobot's diffusion policy | done: 70.3 % vs LeRobot 75.6 % on the same seeds |
-| M3 | C++ port (std, maybe Eigen, no ML libraries) | |
+| M2 | Flow-matching policy on PushT keypoints (NumPy), compared with LeRobot's diffusion policy | done: 69.2 % vs LeRobot 74.7 % on the same seeds |
+| M3 | C++ port (std, maybe Eigen, no ML libraries) | inference done: matches NumPy, 2.4 ms per decision on 1 laptop core; Pi 5 next |
 | M4 | Vision: policy from images | |
 | M5 | Real robot arm | |
 | M6 | Ship: write-up, demo, release | |
@@ -27,14 +27,15 @@ env, same eval code, same 500 test seeds (200000-200499).**
 
 | Policy | Success rate | Avg max reward | Params | Time per action chunk (batch 1) |
 |---|---|---|---|---|
-| **Flow matching, FiLM residual MLP (NumPy, ours)** | **70.3 % ± 2.0** (3 training seeds: 70.0 / 68.4 / 72.4) | 0.942 | 2.4 M | **2.4 ms** (CPU, 10 Euler steps) |
-| LeRobot diffusion policy, `lerobot/diffusion_pusht_keypoints` (re-measured) | 75.6 % ± 1.9 | 0.964 | 248.8 M | 242 ms (RTX 3050 GPU), 623 ms (CPU); 10 DDIM steps |
-| Flow matching (C++, ours) | – | – | | M3 |
+| **Flow matching, FiLM residual MLP (ours)** | **69.2 % ± 2.3** (3 training seeds × 3 noise draws) | 0.936 | 2.4 M | **2.4 ms** (NumPy, CPU) / **2.4 ms** (C++, 1 core, -O3 -march=native); 10 Euler steps |
+| LeRobot diffusion policy, `lerobot/diffusion_pusht_keypoints` (re-measured) | 74.7 % ± 1.0 (3 noise draws: 75.6 / 75.0 / 73.6) | 0.966 | 248.8 M | 242 ms (RTX 3050 GPU), 623 ms (CPU); 10 DDIM steps |
+| Same policy in C++ (ours), closed loop | 65.4 % (1 draw; NumPy draws of the same checkpoint: 70.0 / 67.0 / 67.6 / 66.2) | 0.940 | 2.4 M | see M3 below |
 
-- **Close to LeRobot's diffusion policy (about 5 points behind) with 100× fewer parameters.** Per decision, our CPU
+- **Close to LeRobot's diffusion policy (about 5.5 points behind) with 100× fewer parameters.** Per decision, our CPU
   policy is **~100× faster than their GPU inference** (2.4 ms vs 242 ms) and **~260× faster CPU-to-CPU** (2.4 ms vs
   623 ms). From scratch in NumPy, trained on a laptop CPU in ~50 min.
-- ± for ours = std over 3 training seeds; ± for LeRobot = one standard error over 500 episodes, sqrt(p(1-p)/500).
+- ± = std over runs (ours: 9 = 3 training seeds × 3 sampling-noise draws; LeRobot: 3 noise draws). A single
+  500-episode eval also has a standard error of about 2 points, sqrt(p(1-p)/500).
 - LeRobot's card reports 71.0 % on seeds 100000-100499 (2024). Re-run today on those seeds it gives 76.6 % ± 1.9, but
   the same seed no longer gives the same start layout (gym-pusht's reset RNG changed; per-seed results are
   uncorrelated), so the published 71.0 % is not comparable seed by seed. Only the same-env numbers above are.
@@ -93,6 +94,22 @@ env, same eval code, same 500 test seeds (200000-200499).**
 
 ## M3: C++ port (in progress)
 Inference port of the FiLM policy, C++17, std only. Weight format: `cpp/weights/FORMAT.md` (weights stored (in, out)).
+
+- Matches NumPy on every intermediate (`test_vectors`, allclose atol 1e-5 + rtol 1e-5): velocity max abs error
+  1.5e-5, final actions 7.6e-5 px. Mutation tests (wrong SiLU sign, `scale` instead of `1 + scale`, reversed time grid)
+  all fail the checks, so the checks have teeth.
+- Closed loop in gym-pusht (C++ does all inference behind a pipe): 65.4 %, within the NumPy policy's
+  sampling-noise spread (66.2-70.0 %).
+- Batch-1 latency per decision (`bench`, median of 1000, 1 core of an i5-12500H), no heap allocation in the Euler loop:
+
+| Euler steps | Success (NumPy, 500 test eps) | C++ `-O2` | C++ `-O3 -march=native` (AVX2) |
+|---|---|---|---|
+| 1 | 7.0 % | 0.88 ms | 0.24 ms |
+| 2 | 45.0 % | 1.79 ms | 0.47 ms |
+| 5 | 63.8 % | 4.39 ms | 1.31 ms |
+| 10 | 70.0 % | 8.81 ms | 2.41 ms |
+
+One Euler step predicts the average of the demonstrated modes, which pushes nowhere useful; 5-10 steps are needed.
 The weights file (`cpp/weights/film_g.bin`, 9.6 MB) is not in git. It is on the Hugging Face Hub
 ([`Kimaa6/flowpolicy-pusht-film`](https://huggingface.co/Kimaa6/flowpolicy-pusht-film), private for now):
 ```bash
@@ -102,7 +119,9 @@ Or regenerate it from a trained checkpoint:
 ```bash
 PYTHONPATH=python python python/scripts/m3_export.py          # -> cpp/weights/film_g.bin + cpp/tests/vectors/vectors.bin
 cmake -S cpp -B cpp/build && cmake --build cpp/build
-./cpp/build/test_vectors                                        # loads weights + test vectors
+./cpp/build/test_vectors                                        # C++ vs NumPy, every intermediate
+cmake -S cpp -B cpp/build-native -DFP_NATIVE=ON && cmake --build cpp/build-native && ./cpp/build-native/bench
+PYTHONPATH=python python python/scripts/m3_eval_cpp.py --episodes 500   # closed loop, C++ policy
 PYTHONPATH=python python python/scripts/m3_check_loader.py    # C++ loader vs NumPy, bitwise
 ```
 

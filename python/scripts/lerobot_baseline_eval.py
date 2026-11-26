@@ -96,8 +96,9 @@ def main():
     p.add_argument("--seed0", type=int, default=200000)
     p.add_argument("--episodes", type=int, default=500)
     p.add_argument("--device", default="cuda" if torch.cuda.is_available() else "cpu")
+    p.add_argument("--torch-seed", type=int, default=0, help="sampling noise draw (diffusion noise)")
     args = p.parse_args()
-    torch.manual_seed(0)
+    torch.manual_seed(args.torch_seed)
 
     pol = LeRobotAdapter(args.device)
     n_params = sum(v.numel() for v in pol.policy.parameters())
@@ -115,7 +116,8 @@ def main():
     out.mkdir(parents=True, exist_ok=True)
     res = {k: (v.tolist() if isinstance(v, np.ndarray) else v) for k, v in r.items()}
     res.update({"repo": REPO, "n_params": n_params, "denoise_steps": pol.cfg.num_inference_steps})
-    json.dump(res, open(out / f"eval{n}_seed{args.seed0}.json", "w"))
+    suffix = f"_torch{args.torch_seed}" if args.torch_seed else ""
+    json.dump(res, open(out / f"eval{n}_seed{args.seed0}{suffix}.json", "w"))
 
 
 if __name__ == "__main__":

@@ -23,10 +23,14 @@ COND_DIM = N_OBS_STEPS * OBS_DIM       # 36
 
 
 class FlowPolicy:
-    def __init__(self, hidden=512, layers=3, n_freqs=8, rng=None, dtype=np.float32, arch="mlp", cond_hidden=256):
-        """layers = hidden layers ("mlp") or residual blocks ("film")."""
+    def __init__(self, hidden=512, layers=3, n_freqs=8, rng=None, dtype=np.float32, arch="mlp", cond_hidden=256,
+                 t_sampling="uniform"):
+        """layers = hidden layers ("mlp") or residual blocks ("film").
+        t_sampling (training only): "uniform" t ~ U(0, 1); "late" t = sqrt(u), density 2t, so more training
+        near t=1 (the data end, where the fine alignment is decided)."""
         self.config = {"hidden": hidden, "layers": layers, "n_freqs": n_freqs, "arch": arch,
-                       "cond_hidden": cond_hidden}
+                       "cond_hidden": cond_hidden, "t_sampling": t_sampling}
+        self.t_sampling = t_sampling
         self.n_freqs, self.arch = n_freqs, arch
         if arch == "mlp":
             sizes = [CHUNK_DIM + COND_DIM + 2 * n_freqs] + [hidden] * layers + [CHUNK_DIM]
@@ -48,7 +52,8 @@ class FlowPolicy:
         """obs (B, 36), actions (B, 16, 2) normalised. Returns (loss, grads)."""
         a1 = actions.reshape(len(actions), CHUNK_DIM)
         a0 = rng.standard_normal(a1.shape).astype(a1.dtype)
-        t = rng.uniform(0.0, 1.0, len(a1)).astype(a1.dtype)
+        u = rng.uniform(0.0, 1.0, len(a1))
+        t = (np.sqrt(u) if self.t_sampling == "late" else u).astype(a1.dtype)
         a_t = (1 - t[:, None]) * a0 + t[:, None] * a1
         diff = self.velocity(a_t, obs, t) - (a1 - a0)
         loss = float(np.mean(diff ** 2))

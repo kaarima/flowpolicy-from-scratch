@@ -23,10 +23,14 @@ ROOT = Path(__file__).resolve().parents[2]
 
 
 def val_loss(policy, val, n=2048, seed=123):
-    """Mean flow-matching loss on the first n val windows, same noise and t every time."""
+    """Mean flow-matching loss on the first n val windows, same noise and t every time (always uniform t,
+    so runs with different t_sampling stay comparable)."""
     rng = np.random.default_rng(seed)
     o, a = val.get(np.arange(min(n, len(val))))
-    return policy.loss_and_grads(o, a, rng)[0]
+    ts, policy.t_sampling = policy.t_sampling, "uniform"
+    loss = policy.loss_and_grads(o, a, rng)[0]
+    policy.t_sampling = ts
+    return loss
 
 
 def main():
@@ -37,6 +41,7 @@ def main():
     p.add_argument("--hidden", type=int, default=512)
     p.add_argument("--layers", type=int, default=3, help="hidden layers (mlp) or residual blocks (film)")
     p.add_argument("--arch", default="mlp", choices=["mlp", "film"])
+    p.add_argument("--t-sampling", default="uniform", choices=["uniform", "late"])
     p.add_argument("--n-freqs", type=int, default=8)
     p.add_argument("--lr", type=float, default=1e-3)
     p.add_argument("--warmup", type=int, default=500)
@@ -55,7 +60,7 @@ def main():
     print(f"train windows {len(train)}, val windows {len(val)}")
 
     rng = np.random.default_rng(args.seed)
-    policy = FlowPolicy(args.hidden, args.layers, args.n_freqs, rng, arch=args.arch)
+    policy = FlowPolicy(args.hidden, args.layers, args.n_freqs, rng, arch=args.arch, t_sampling=args.t_sampling)
     n_params = sum(v.size for v in policy.net.params.values())
     print(f"policy {args.arch}, {args.layers} layers/blocks, hidden {args.hidden}, {n_params / 1e6:.2f} M params")
     opt = Adam(policy.net.params, lr=args.lr, weight_decay=args.weight_decay,

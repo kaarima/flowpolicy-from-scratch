@@ -1,26 +1,64 @@
 # Flow-matching robot policy from scratch
 
-A π0-style flow-matching action policy written from scratch: NumPy prototype first, then a C++ port
-(std, maybe Eigen, no ML libraries). Evaluated on PushT (`gym-pusht` + `lerobot/pusht`), compared with
-LeRobot's diffusion policy, then deployed on a real arm. PyTorch is used only for gradient checks.
+A π0-style flow-matching action policy, written from scratch in NumPy (own MLP, backprop, Adam, sampler).
+A C++ port (std, maybe Eigen, no ML libraries) comes in M3. Evaluated on PushT (`gym-pusht` +
+`lerobot/pusht_keypoints`) against LeRobot's diffusion policy, then deployed on a real arm.
+PyTorch is used only for gradient checks.
+
+![FiLM policy on PushT](docs/media/m2_film512.gif)
+
+*FiLM policy (M2, work in progress: 49.6 % success on 500 test episodes). Not the final result.*
 
 ## Milestones
 | | Milestone | Status |
 |---|---|---|
 | M0 | Setup: repo, env, inspect PushT env and dataset | done |
 | M1 | 2D flow-matching toy in NumPy (own MLP, backprop, Adam) | done |
-| M2 | Conditional flow-matching action policy on PushT state | |
-| M3 | Action chunks, evaluation vs LeRobot diffusion policy | |
-| M4 | C++ port (forward + training) | |
-| M5 | Speed / numerical parity, C++ vs NumPy | |
-| M6 | Deployment on a real arm | |
+| M2 | Flow-matching policy on PushT keypoints (NumPy), compared with LeRobot's diffusion policy | in progress: 49.6 % success |
+| M3 | C++ port (std, maybe Eigen, no ML libraries) | |
+| M4 | Vision: policy from images | |
+| M5 | Real robot arm | |
+| M6 | Ship: write-up, demo, release | |
 
 ## Results
-| Policy | PushT success rate | Mean coverage | Notes |
-|---|---|---|---|
-| Flow matching (NumPy) | – | – | |
-| Flow matching (C++) | – | – | |
-| LeRobot diffusion policy | – | – | |
+PushT, keypoints + agent position. Success = max coverage > 95 % within 300 steps.
+
+| Policy | Success rate | Avg max reward | Episodes | Notes |
+|---|---|---|---|---|
+| Flow matching, FiLM residual MLP (NumPy, ours) | **49.6 % ± 2.2** (95 % CI 45.2–54.0) | 0.897 | 500 (test seeds) | 2.4 M params, CPU, ~45 min training |
+| Flow matching (C++, ours) | – | – | | M3 |
+| LeRobot diffusion policy (keypoints) | 71.0 % | 0.97 | 500 | from the [model card](https://huggingface.co/lerobot/diffusion_pusht_keypoints), not re-measured |
+
+± = one standard error over 500 episodes, sqrt(p(1-p)/500); 95 % CI = ± 1.96 s.e. LeRobot's card gives no eval seeds or checkpoint step, and says 50 episodes in its usage
+text but 500 in its results table. More baselines (including the original paper) in `docs/BASELINES.md`.
+
+## M2: flow-matching policy on PushT
+**Setup**
+- Observation: 2 frames × (16 T-keypoint coordinates + agent x, y) = 36-D, normalised to [-1, 1] with min/max from
+  the training episodes only (185 train / 21 val episodes).
+- Action: chunk of 16 target positions (16 × 2). Execute the first 8, then replan.
+- Flow: linear path from noise (t=0) to the action chunk (t=1), loss = MSE on the velocity, 10 Euler steps to sample.
+- Training: Adam, lr 1e-3 with warm-up and cosine decay, batch 256, 50k steps, EMA 0.999 of the weights.
+- Checkpoints are chosen on eval seeds 100000–100049; reported numbers use separate test seeds 200000–200499.
+
+**What made the difference: conditioning, not size** (500 test episodes each, ± = 1 s.e.)
+
+| Network | Params | Success | Avg max reward | Best-of-8 action error, train / val |
+|---|---|---|---|---|
+| Concat MLP 512×3 | 0.59 M | 8.2 % ± 1.2 | 0.744 | 11.6 / 15.0 px |
+| Concat MLP 1024×3 | 2.2 M | 21.0 % ± 1.8 | 0.844 | 9.7 / 14.5 px |
+| **FiLM residual MLP 512×3** | 2.4 M | **49.6 % ± 2.2** | **0.897** | 6.0 / 16.6 px |
+
+- Concat MLP: the observation and time embedding are just concatenated to the noisy actions at the input.
+- FiLM: the observation and time go through a small encoder that gives a scale and shift to every residual block,
+  as in Diffusion Policy's U-Net. At the same size it more than doubles the success rate.
+- Ruled out first: more Euler steps (30) or replanning more often (execute 4) did not help, so the problem was the
+  model, not sampling.
+- Best-of-8 error: about half of the one-sample error comes from the model picking a different (valid) pushing mode.
+- **Open problem: overfitting.** FiLM's val loss rises from 0.087 (9k steps) to 0.19 (50k) while train loss keeps
+  falling, and success peaks at 30k steps. Next: observation noise and weight decay.
+
+![training curves](docs/media/m2_runs.png)
 
 ## PushT env notes (checked in `python/scripts/m2_inspect.py`)
 - `obs_type="environment_state_agent_pos"` matches `lerobot/pusht_keypoints` exactly: same 16 keypoint order,
@@ -31,31 +69,30 @@ LeRobot's diffusion policy, then deployed on a real arm. PyTorch is used only fo
 - Gotcha 2: the dataset's `next.reward` is not the env's reward and `next.success` is never True, although replays
   reach env success. Score success and coverage only from the env's `info`.
 
-## Target
-LeRobot diffusion policy on keypoints: **71.0 % success, 0.97 avg max overlap, 500 episodes**
-([model card](https://huggingface.co/lerobot/diffusion_pusht_keypoints)). Caveats: eval seeds and checkpoint step
-are not given, and the card says 50 episodes in its usage text but 500 in its results table. Details: `docs/BASELINES.md`.
-
 ## Layout
 ```
-python/flowmatch/   NumPy prototype
-python/scripts/     runnable scripts (m0_inspect.py, ...)
-python/tests/       tests and gradient checks
-cpp/                C++ port
+python/flowmatch/   NumPy code: mlp.py, film.py, adam.py, flow.py (M1), policy.py, data.py, eval_pusht.py
+python/scripts/     m0_inspect, m1_toy2d, m2_inspect, m2_data_check, m2_train, m2_eval, m2_offline_eval, m2_plot_runs
+python/tests/       gradient checks vs torch and finite differences, data pipeline tests
+cpp/                C++ port (M3)
 notebooks/          Colab/Kaggle notebooks
-docs/PROGRESS.md    one line per session
+docs/PROGRESS.md    one line per session; docs/BASELINES.md: published numbers with sources
 ```
 
-## Setup
+## Setup and commands
 ```bash
 python3 -m venv .venv && source .venv/bin/activate
-pip install -r requirements.txt          # add -r requirements-dev.txt for grad checks
-python python/scripts/m0_inspect.py
-PYTHONPATH=python python python/scripts/m1_toy2d.py --data moons
-pytest -q                                # gradient checks vs torch + finite differences
+pip install -r requirements.txt -r requirements-dev.txt   # dev = torch (grad checks only) + pytest
+export PYTHONPATH=python                                   # replaces any ROS PYTHONPATH
+pytest -q
+
+python python/scripts/m1_toy2d.py --data moons                                   # M1 toy
+python python/scripts/m2_train.py --run film512 --arch film --steps 50000        # M2 training (CPU)
+python python/scripts/m2_eval.py --ckpt checkpoints/film512/best.npz --episodes 500
+python python/scripts/m2_offline_eval.py --ckpt checkpoints/film512/best.npz
 ```
 
-## M1 toy results (10k steps, batch 512, MLP 3x128 SiLU, 50 Euler steps)
+## M1: 2D flow-matching toy (10k steps, batch 512, MLP 3x128 SiLU, 50 Euler steps)
 Sliced Wasserstein distance to data (lower is better; floor = data vs fresh data).
 
 | Dataset | SW samples | floor | noise | train time (CPU) |

@@ -1,4 +1,4 @@
-# Placeholder: C++ port of the NumPy flow-matching policy (M4+). std (+ maybe Eigen), no ML libraries.
+# Placeholder: C++ port of the NumPy flow-matching policy (M3). std (+ maybe Eigen), no ML libraries.
 cmake_minimum_required(VERSION 3.16)
 project(flowpolicy CXX)
 set(CMAKE_CXX_STANDARD 17)

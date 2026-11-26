@@ -8,6 +8,7 @@
 #include <string>
 
 #include "flowpolicy/fpbin.hpp"
+#include "flowpolicy/film.hpp"
 #include "flowpolicy/tensor.hpp"
 
 #ifndef FP_WEIGHTS
@@ -53,10 +54,19 @@ int main(int argc, char** argv) {
         ok &= check(vectors, "h0", fp::Linear::from(weights, "Win", "bin").forward(x_t), 1e-5f);
         // 2. Linear + SiLU: condition encoder
         ok &= check(vectors, "cond_e", fp::silu(fp::Linear::from(weights, "Wc", "bc").forward(cond)), 1e-5f);
+        // 3. time embedding, and the condition [obs_n, temb]
+        const fp::Tensor temb = fp::time_embedding(fp::Tensor::from(vectors.get("t")),
+                                                   fp::Tensor::from(weights.get("time_freqs")));
+        ok &= check(vectors, "temb", temb, 1e-5f);
+        ok &= check(vectors, "cond", fp::concat_cols(fp::Tensor::from(vectors.get("obs_n")), temb), 1e-5f);
+        // 4. FiLM block 0, from the NumPy inputs h0 and cond_e (isolates the block from earlier errors)
+        fp::Tensor scale0;
+        const fp::Tensor b0 = fp::FilmBlock::from(weights, 0).forward(
+            fp::Tensor::from(vectors.get("h0")), fp::Tensor::from(vectors.get("cond_e")), &scale0);
+        ok &= check(vectors, "film0_scale", scale0, 1e-5f);
+        ok &= check(vectors, "block0_out", b0, 1e-5f);
         if (!ok) return 2;
         // TODO, in order:
-        //   3. time embedding:            temb(t, time_freqs)   vs  temb
-        //   4. FiLM block 0:              vs  film0_scale, block0_out
         //   5. full network:              vs  velocity
         //   6. Euler sampler from noise0: vs  sample_chunk_n, sample_actions_px
     } catch (const std::exception& e) {

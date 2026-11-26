@@ -37,6 +37,8 @@ private:
 // C = A @ B. A: (M, K), B: (K, N) -> (M, N). Loop order i-k-j: the inner loop walks rows of B and C,
 // which are contiguous in memory. Accumulates in float (like NumPy float32).
 Tensor matmul(const Tensor& A, const Tensor& B);
+// Same, into a preallocated out of shape (M, N) (overwritten). No allocation: for the sampler loop.
+void matmul(const Tensor& A, const Tensor& B, Tensor& out);
 
 // Fully connected layer, y = x @ W + b with W (in, out), b (out).
 struct Linear {

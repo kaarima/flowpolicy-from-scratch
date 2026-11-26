@@ -14,6 +14,7 @@ set(CMAKE_CXX_FLAGS_RELEASE "-O2")
 add_library(flowpolicy
   src/fpbin.cpp
   src/tensor.cpp
+  src/film.cpp
 )
 target_include_directories(flowpolicy PUBLIC include)
 target_compile_options(flowpolicy PRIVATE -Wall -Wextra -Wpedantic -Wconversion -Wshadow)

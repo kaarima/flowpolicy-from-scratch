@@ -1,0 +1,27 @@
+# Python
+.venv/
+venv/
+__pycache__/
+*.pyc
+.ipynb_checkpoints/
+.pytest_cache/
+
+# Data, checkpoints, outputs
+data/
+checkpoints/
+*.ckpt
+*.npz
+outputs/
+
+# Media: GIFs only kept under docs/media
+*.gif
+!docs/media/*.gif
+
+# C++ build
+cpp/build/
+build/
+
+# Agent files (never committed)
+CLAUDE.md
+.claude/
+AGENTS.md

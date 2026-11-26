@@ -1,0 +1,4 @@
+-r requirements.txt
+# Gradient checks only. Never imported by the model code.
+torch
+pytest

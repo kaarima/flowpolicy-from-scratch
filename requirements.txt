@@ -1,0 +1,6 @@
+numpy
+gymnasium
+gym-pusht
+datasets
+imageio
+matplotlib

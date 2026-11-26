@@ -93,7 +93,12 @@ env, same eval code, same 500 test seeds (200000-200499).**
 
 ## M3: C++ port (in progress)
 Inference port of the FiLM policy, C++17, std only. Weight format: `cpp/weights/FORMAT.md` (weights stored (in, out)).
-The weights file (`cpp/weights/film_g.bin`, 9.6 MB) is not in git. Regenerate it from a trained checkpoint:
+The weights file (`cpp/weights/film_g.bin`, 9.6 MB) is not in git. It is on the Hugging Face Hub
+([`Kimaa6/flowpolicy-pusht-film`](https://huggingface.co/Kimaa6/flowpolicy-pusht-film), private for now):
+```bash
+huggingface-cli download Kimaa6/flowpolicy-pusht-film film_g.bin --local-dir cpp/weights
+```
+Or regenerate it from a trained checkpoint:
 ```bash
 PYTHONPATH=python python python/scripts/m3_export.py          # -> cpp/weights/film_g.bin + cpp/tests/vectors/vectors.bin
 cmake -S cpp -B cpp/build && cmake --build cpp/build

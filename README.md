@@ -5,16 +5,17 @@ A C++ port (std, maybe Eigen, no ML libraries) comes in M3. Evaluated on PushT (
 `lerobot/pusht_keypoints`) against LeRobot's diffusion policy, then deployed on a real arm.
 PyTorch is used only for gradient checks.
 
-![FiLM policy on PushT](docs/media/m2_film512.gif)
+![FiLM policy on PushT](docs/media/m2_film_noise4_late.gif)
 
-*FiLM policy (M2, work in progress: 49.6 % success on 500 test episodes). Not the final result.*
+*Best M2 policy (FiLM + obs noise + late-t sampling): 70.0 % success on 500 test episodes, one training seed.
+These 4 episodes (test seeds 200000-200003) all succeed; 30 % of episodes do not.*
 
 ## Milestones
 | | Milestone | Status |
 |---|---|---|
 | M0 | Setup: repo, env, inspect PushT env and dataset | done |
 | M1 | 2D flow-matching toy in NumPy (own MLP, backprop, Adam) | done |
-| M2 | Flow-matching policy on PushT keypoints (NumPy), compared with LeRobot's diffusion policy | in progress: 49.6 % success |
+| M2 | Flow-matching policy on PushT keypoints (NumPy), compared with LeRobot's diffusion policy | 70.0 % success (LeRobot DP: 71.0 %); seed repeats pending |
 | M3 | C++ port (std, maybe Eigen, no ML libraries) | |
 | M4 | Vision: policy from images | |
 | M5 | Real robot arm | |
@@ -25,7 +26,7 @@ PushT, keypoints + agent position. Success = max coverage > 95 % within 300 step
 
 | Policy | Success rate | Avg max reward | Episodes | Notes |
 |---|---|---|---|---|
-| Flow matching, FiLM residual MLP (NumPy, ours) | **49.6 % ± 2.2** (95 % CI 45.2–54.0) | 0.897 | 500 (test seeds) | 2.4 M params, CPU, ~45 min training |
+| Flow matching, FiLM residual MLP + obs noise 4 px + late-t sampling (NumPy, ours) | **70.0 % ± 2.0** (95 % CI 66.0–74.0) | 0.946 | 500 (test seeds) | 2.4 M params, CPU, ~50 min training, 1 training seed |
 | Flow matching (C++, ours) | – | – | | M3 |
 | LeRobot diffusion policy (keypoints) | 71.0 % | 0.97 | 500 | from the [model card](https://huggingface.co/lerobot/diffusion_pusht_keypoints), not re-measured |
 
@@ -55,10 +56,31 @@ text but 500 in its results table. More baselines (including the original paper)
 - Ruled out first: more Euler steps (30) or replanning more often (execute 4) did not help, so the problem was the
   model, not sampling.
 - Best-of-8 error: about half of the one-sample error comes from the model picking a different (valid) pushing mode.
-- **Open problem: overfitting.** FiLM's val loss rises from 0.087 (9k steps) to 0.19 (50k) while train loss keeps
-  falling, and success peaks at 30k steps. Next: observation noise and weight decay.
+- FiLM overfits: its val loss rises from 0.087 (9k steps) to 0.19 (50k) while train loss keeps falling.
 
 ![training curves](docs/media/m2_runs.png)
+
+**From 49.6 % to 70.0 %: regularisation and where the flow trains** (FiLM 512×3, 500 test episodes, ± 2.0-2.2 s.e.)
+
+| Change (one at a time) | Success, best ckpt | Success, 50k ckpt | Avg max reward (best) |
+|---|---|---|---|
+| FiLM | 49.6 % | 47.4 % | 0.897 |
+| + weight decay 0.05 | 40.6 % | 49.0 % | 0.925 |
+| + obs noise 2 px | 58.4 % | 58.0 % | 0.900 |
+| + obs noise 4 px | 60.0 % | 64.6 % | 0.912 |
+| + obs noise 2 px + late t | 65.4 % | 63.0 % | 0.951 |
+| same, training seed 1 | 61.6 % | 62.6 % | 0.952 |
+| **+ obs noise 4 px + late t** | **70.0 %** | **70.0 %** | 0.946 |
+
+- Obs noise: Gaussian noise (in pixels) on the 36 observation values during training. +10 points.
+- Late t: train the flow more near t=1, the data end, where fine alignment is decided (t = sqrt(u), density 2t).
+  +5-7 points, and the highest coverage.
+- Weight decay: no effect.
+- Seed-to-seed spread (two training seeds of the same setup): about 2-4 points. The 70.0 % run has one seed so far.
+- Val loss rises in every run, even when closed-loop success improves: on this task it is a poor checkpoint selector.
+- Failures of the 70 % policy: 116 of 150 are near misses (max coverage 0.90-0.95), 27 never pass 0.5.
+
+![training curves, all FiLM runs](docs/media/m2_runs_all.png)
 
 ## PushT env notes (checked in `python/scripts/m2_inspect.py`)
 - `obs_type="environment_state_agent_pos"` matches `lerobot/pusht_keypoints` exactly: same 16 keypoint order,
@@ -87,9 +109,10 @@ export PYTHONPATH=python                                   # replaces any ROS PY
 pytest -q
 
 python python/scripts/m1_toy2d.py --data moons                                   # M1 toy
-python python/scripts/m2_train.py --run film512 --arch film --steps 50000        # M2 training (CPU)
-python python/scripts/m2_eval.py --ckpt checkpoints/film512/best.npz --episodes 500
-python python/scripts/m2_offline_eval.py --ckpt checkpoints/film512/best.npz
+python python/scripts/m2_train.py --run film_noise4_late --arch film --steps 50000 \
+    --obs-noise 4 --t-sampling late                                                # best M2 config (CPU, ~50 min)
+python python/scripts/m2_eval.py --ckpt checkpoints/film_noise4_late/best.npz --episodes 500   # test seeds
+python python/scripts/m2_offline_eval.py --ckpt checkpoints/film_noise4_late/best.npz
 ```
 
 ## M1: 2D flow-matching toy (10k steps, batch 512, MLP 3x128 SiLU, 50 Euler steps)
